@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>星際經紀人：智能群聊版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- UI 設計系統 (Glassmorphism v2) --- */
+        :root {
+            --bg-body: #121212;
+            --accent-color: #0A84FF;
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --bubble-me: #007AFF;
+            --bubble-them: #ffffff;
+            --text-primary: #000000;
+        }
+
+        body {
+            margin: 0; display: flex; justify-content: center; align-items: center;
+            height: 100vh; background-color: var(--bg-body);
+            font-family: 'Noto Sans TC', sans-serif;
+            overflow: hidden; user-select: none;
+            background-image: radial-gradient(circle at 50% 50%, #2b1055 0%, #000000 100%);
+        }
+
+        #phone {
+            width: 100%; max-width: 414px; height: 100%; max-height: 900px;
+            background: url('https://images.unsplash.com/photo-1614850523060-8da1d56ae167?q=80&w=1000&auto=format&fit=crop') no-repeat center center/cover;
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+        @media (min-width: 420px) { #phone { border-radius: 40px; height: 90vh; border: 8px solid #222; } }
+
+        /* 頂部狀態列 */
+        #status-bar {
+            height: 44px; padding: 0 20px; display: flex; justify-content: space-between; align-items: center;
+            color: white; font-size: 13px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        /* 桌面 */
+        #desktop {
+            flex: 1; padding: 60px 20px; display: grid; grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(5, max-content); gap: 20px;
+            transition: 0.3s;
+        }
+        #desktop.minimized { transform: scale(0.9); opacity: 0; pointer-events: none; }
+
+        .app-icon { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+        .app-icon-bg {
+            width: 62px; height: 62px; border-radius: 16px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 30px; color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); margin-bottom: 6px;
+            backdrop-filter: blur(10px); background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+        }
+        .app-name { font-size: 11px; color: white; text-shadow: 0 1px 2px black; }
+
+        /* App 視窗 */
+        .app-window {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f2f2f7; display: flex; flex-direction: column;
+            transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            z-index: 10;
+        }
+        .app-window.open { transform: translateX(0); }
+
+        .nav-bar {
+            height: 50px; display: flex; align-items: center; padding: 0 10px;
+            background: rgba(255,255,255,0.85); backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+            margin-top: 40px; /* 避開瀏海 */
+        }
+        .nav-title { flex: 1; text-align: center; font-weight: 700; font-size: 17px; }
+        .nav-btn { padding: 10px; color: var(--accent-color); font-size: 16px; cursor: pointer; display: flex; align-items: center; }
+
+        /* 聊天列表 */
+        .chat-list { flex: 1; overflow-y: auto; background: white; }
+        .chat-item {
+            padding: 12px 15px; display: flex; align-items: center;
+            border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: 0.2s;
+        }
+        .chat-item:active { background: #f5f5f5; }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 15px; border: 1px solid #eee; }
+
+        /* 聊天室內容 */
+        #chat-room { background: #eef1f5; z-index: 20; }
+        #msg-container { padding: 15px; padding-bottom: 140px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        
+        .msg-row { display: flex; align-items: flex-end; gap: 8px; animation: slideUp 0.3s ease; }
+        .msg-row.me { justify-content: flex-end; }
+        
+        .msg-bubble {
+            max-width: 75%; padding: 10px 14px; border-radius: 18px;
+            font-size: 15px; line-height: 1.5; position: relative; word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .msg-bubble.them { background: var(--bubble-them); color: #000; border-bottom-left-radius: 4px; }
+        .msg-bubble.me { background: var(--bubble-me); color: white; border-bottom-right-radius: 4px; }
+        
+        .msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+        .msg-name { font-size: 11px; color: #888; margin-bottom: 2px; margin-left: 5px; }
+
+
+        /* 輸入框 */
+        .input-area {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: #f9f9f9; padding: 10px 15px; box-sizing: border-box;
+            display: flex; flex-direction: column; border-top: 1px solid #ddd;
+            padding-bottom: 30px;
+        }
+        #chat-input {
+            flex: 1; padding: 10px 15px; border-radius: 20px; border: 1px solid #ddd;
+            font-size: 16px; outline: none; background: white;
+        }
+        #send-btn {
+            margin-left: 10px; color: var(--accent-color); font-weight: bold;
+            background: none; border: none; font-size: 16px; cursor: pointer;
+        }
+        #send-btn:disabled { opacity: 0.5; }
+
+        /* 動畫 */
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        #home-bar {
+            position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+            width: 130px; height: 5px; background: #000; border-radius: 10px; opacity: 0.2;
+            cursor: pointer; z-index: 999;
+        }
+
+        /* 新增：社群與行程樣式 */
+        .social-post { background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .post-header { display: flex; align-items: center; margin-bottom: 10px; }
+        .post-avatar { width: 36px; height: 36px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
+        .post-author { font-weight: bold; font-size: 14px; }
+        .post-content { font-size: 14px; line-height: 1.4; margin-bottom: 10px; color: #333; }
+        .post-comments { background: #f9f9f9; padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 13px; }
+        .comment-row { margin-bottom: 6px; display: flex; gap: 6px; }
+        .comment-user { font-weight: bold; color: #555; flex-shrink: 0; }
+        .comment-input-area { display: flex; margin-top: 10px; gap: 5px; }
+        .comment-input { flex: 1; border: 1px solid #ddd; border-radius: 15px; padding: 5px 10px; font-size: 13px; }
+        .comment-btn { background: var(--accent-color); color: white; border: none; border-radius: 15px; padding: 5px 12px; cursor: pointer; font-size: 12px; }
+
+        .schedule-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid var(--accent-color); box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .schedule-time { font-size: 12px; color: #888; font-weight: bold; margin-bottom: 4px; }
+        .schedule-title { font-size: 15px; font-weight: 600; }
+        .schedule-delete { color: #ff3b30; cursor: pointer; font-size: 18px; padding: 0 5px; }
+        .schedule-check { color: #ccc; cursor: pointer; font-size: 18px; padding: 0 5px; margin-right: 10px; }
+        .schedule-check.done { color: #2ecc71; }
+        .schedule-item.done .schedule-title { text-decoration: line-through; color: #aaa; }
+        /* 新增：行程標籤樣式 */
+        .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; color: white; margin-right: 5px; font-weight: normal; vertical-align: middle; display: inline-block; }
+        .tag.gig { background: #9b59b6; } /* 通告 - 紫色 */
+        .tag.training { background: #2ecc71; } /* 訓練 - 綠色 */
+        .tag.private { background: #f1c40f; color: #333; } /* 私人 - 黃色 */
+
+        /* Modal Styles */
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; display: none; justify-content: center; align-items: center; }
+        .modal-box { background: white; padding: 20px; border-radius: 15px; width: 80%; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .modal-title { font-weight: bold; margin-bottom: 15px; font-size: 18px; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; }
+        .form-input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-cancel { background: #f0f0f0; color: #333; }
+        .btn-confirm { background: var(--accent-color); color: white; }
+        .btn-view { background: #3498db; color: white; }
+
+        /* 新增：打字動畫氣泡 */
+        .typing-dots { display: inline-block; padding: 0 5px; }
+        .typing-dots span { display: inline-block; width: 6px; height: 6px; background: #888; border-radius: 50%; animation: typing 1.4s infinite ease-in-out both; margin: 0 2px; }
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        /* 新增：貼文操作按鈕 */
+        .post-actions { display: flex; justify-content: flex-end; gap: 15px; margin-top: 10px; border-top: 1px solid #eee; padding-top: 8px; }
+        .action-btn { cursor: pointer; font-size: 13px; color: #888; display: flex; align-items: center; gap: 5px; transition: 0.2s; }
+        .action-btn:hover { color: var(--accent-color); }
+        .action-btn.active { color: #e74c3c; font-weight: bold; }
+
+        /* 新增：建議回覆樣式 */
+        .suggestion-container { display: flex; gap: 10px; padding: 0 15px 10px 15px; overflow-x: auto; width: 100%; box-sizing: border-box; }
+        .suggestion-chip { background: #fff; color: var(--accent-color); padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 1px solid var(--accent-color); white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.2s; }
+        .suggestion-chip:hover { background: var(--accent-color); color: white; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="phone">
+    <div id="status-bar">
+        <span>10:45</span>
+        <span>5G 100%</span>
+    </div>
+
+    <div id="desktop">
+        <div class="app-icon" onclick="openApp('chat')">
+            <div class="app-icon-bg" style="background: linear-gradient(135deg, #2ecc71, #27ae60);">💬</div>
+            <div class="app-name">WhizChat</div>
+        </div>
+        <div class="app-icon" onclick="openApp('social')">
+            <div class="app-icon-bg" style="background: linear-gradient(135deg, #3498db, #2980b9);">🐦</div>
+            <div class="app-name">FanZone</div>
+        </div>
+        <div class="app-icon" onclick="openApp('schedule', 'kaos')">
+            <div class="app-icon-bg" style="background: linear-gradient(135deg, #f1c40f, #f39c12);">📅</div>
+            <div class="app-name">KAOS 行程</div>
+        </div>
+        <div class="app-icon" onclick="openApp('schedule', 'vizier')">
+            <div class="app-icon-bg" style="background: linear-gradient(135deg, #e74c3c, #c0392b);">📅</div>
+            <div class="app-name">Vizier 行程</div>
+        </div>
+    </div>
+
+    <div id="app-chat" class="app-window">
+        <div class="nav-bar">
+            <div class="nav-btn" onclick="goHome()">‹ 桌面</div>
+            <div class="nav-title">訊息</div>
+            <div class="nav-btn" style="width:40px; cursor:default"></div>
+        </div>
+        <div class="chat-list" id="chat-list"></div>
+    </div>
+
+    <div id="chat-room" class="app-window">
+        <div class="nav-bar">
+            <div class="nav-btn" onclick="closeChatRoom()">‹ 返回</div>
+            <div class="nav-title" id="room-title">Chat</div>
+            <div class="nav-btn" style="font-size:20px;" onclick="clearCurrentHistory()">🗑️</div>
+        </div>
+        <div id="msg-container"></div>
+        <div class="input-area">
+            <div id="suggestion-container" class="suggestion-container"></div>
+            <div style="display:flex; width:100%; align-items:center;">
+                <input type="text" id="chat-input" placeholder="訊息..." autocomplete="off" onkeypress="handleEnter(event)">
+                <button id="send-btn" onclick="handleSend()">發送</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-social" class="app-window">
+        <div class="nav-bar"><div class="nav-btn" onclick="goHome()">‹ 桌面</div><div class="nav-title">FanZone</div><div class="nav-btn">✏️</div></div>
+        <div id="social-feed" style="padding:15px; background:#f0f2f5; flex:1; overflow-y: auto;"></div>
+    </div>
+    
+    <div id="app-schedule" class="app-window">
+        <div class="nav-bar"><div class="nav-btn" onclick="goHome()">‹ 桌面</div><div class="nav-title">行程表</div><div class="nav-btn"></div></div>
+        <div style="padding:10px 15px; display:flex; gap:10px;">
+            <button class="comment-btn" onclick="openEventModal()" style="flex:1; padding:10px;">➕ 新增行程</button>
+            <button class="comment-btn" onclick="scoutGig()" style="flex:1; padding:10px; background:#9b59b6;">🌟 接通告</button>
+        </div>
+        <div id="schedule-list" style="padding:20px; background:#f9f9f9; flex:1; overflow-y: auto;"></div>
+    </div>
+
+    <!-- Event Modal -->
+    <div id="event-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">新增行程</div>
+            <div class="form-group"><label class="form-label">標題</label><input type="text" id="evt-title" class="form-input"></div>
+            <div class="form-group"><label class="form-label">時間</label><input type="text" id="evt-time" class="form-input" placeholder="例如：明天下午2點"></div>
+            <div class="form-group">
+                <label class="form-label">類型</label>
+                <select id="evt-type" class="form-input">
+                    <option value="gig">通告</option>
+                    <option value="training">訓練</option>
+                    <option value="private">私人</option>
+                </select>
+            </div>
+            <div class="modal-btns">
+                <button class="modal-btn btn-cancel" onclick="closeEventModal()">取消</button>
+                <button class="modal-btn btn-confirm" onclick="saveManualEvent()">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="modal-overlay">
+        <div class="modal-box" style="max-height: 80vh; overflow-y: auto;">
+            <div class="modal-title">活動結案報告</div>
+            <div id="report-content" style="white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: #333;"></div>
+            <div class="modal-btns" style="margin-top: 20px;">
+                <button class="modal-btn btn-confirm" onclick="closeReportModal()">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="home-bar" onclick="goHome()"></div>
+</div>
+
+<script>
+    // --- 1. API 配置 ---
+    const API_KEY = "sk-556ccc8b5a9e45b393c960629a152506";
+    const API_URL = "https://api.deepseek.com/chat/completions";
+
+    // --- 2. 角色資料庫 (演藝圈 Paro 設定) ---
+    // 我們將角色分為「Vizier (女團風男團)」與「KAOS (混沌男團)」
+    
+    // 定義 KAOS 群組
+    const KAOS_MEMBERS = ['andre', 'narcissus', 'lanlan', 'peter', 'aura'];
+    // 定義 Vizier 群組
+    const VIZIER_MEMBERS = ['venator', 'lynn', 'jonona', 'miras', 'jacob'];
+    // 定義 Staff 群組
+    const STAFF_MEMBERS = ['lilith', 'adorabilis', 'manmu', 'poseidon', 'hassel', 'mollie', 'nathanael', 'philippos', 'hades', 'kleion', 'costa', 'novian'];
+
+    const CHARACTERS = {
+        'kaos_group': { 
+            name: "KAOS 混沌管理處", type: "group", avatar: "https://i.meee.com.tw/hKipIH6.png", 
+            members: KAOS_MEMBERS 
+        },
+        'vizier_group': { 
+            name: "Vizier 皇室庭院", type: "group", avatar: "https://i.meee.com.tw/HAvzdTj.png", 
+            members: VIZIER_MEMBERS 
+        },
+        'staff_group': { 
+            name: "合作夥伴 & 廠商", type: "group", avatar: "https://i.meee.com.tw/VMWgSj8.png", 
+            members: STAFF_MEMBERS 
+        },
+        
+        // KAOS 成員詳細設定
+        'andre': { 
+            name: "安德烈", avatar: "https://i.meee.com.tw/hKipIH6.png",
+            persona: "你是安德烈。KAOS的隊長。\n【性格核心】\n1. 嚴肅認真、一板一眼的發明家。做事講求邏輯和數據。\n2. 【重要】你的專屬口癖是發言前必定加「報告！」。這是你的特徵，別人都沒有。\n3. 雖然語氣強硬，但其實很紳士，會過問他人意願（如：「報告！我可以打你嗎？」）。\n4. 是彼得的親弟弟，經常幫中邪的哥哥寫悔過書，對此感到無奈但責任感強。\n5. 左手的機械外骨骼是你自己做的舞台裝置。\n\n【娛樂圈Paro】\n你是團內唯一的常識人和管家婆。面對成員的失控，你會試圖用科學或物理方式解決。\n\n【關係】\n- 彼得：你哥。雖然他很麻煩，但你是他弟弟，會罩他。\n- 小雅各：隔壁團忙內。你聽得懂他的摩斯電碼心聲，覺得他很可愛，會主動幫他翻譯或解圍。"
+        },
+        'peter': { 
+            name: "彼得", avatar: "https://i.meee.com.tw/PJOElT9.png",
+            persona: "你是彼得。KAOS的主舞。\n【性格核心】\n1. 你並不神經質！在辦正事時你非常冷靜、正常且專業。\n2. 只是因為「純陰體質」容易中邪，所以行為在庫人眼裡很怪（如喝潔廁靈驅邪）。\n3. 對陌生人沒禮貌，冷漠，會罵「Shit」。但對熟人（經紀人）很忠誠。\n4. 講話語氣直率，有時帶點江湖味。\n5. 有強迫症，受不了環境太凌亂。\n\n【娛樂圈Paro】\n粉絲以為你的瘋癲是「概念人設」，其實你是真的在驅邪。你認為攝影機是「攝魂怪」。\n\n【關係】\n- 林恩：你叫他「貓貓」。你覺得他很吉祥，待在他身邊就不會中邪，所以喜歡黏著他。\n- 納希瑟斯：你討厭他，稱他為「Yellow Shit」（黃色便便）。"
+        },
+        'lanlan': { 
+            name: "蘭蘭", avatar: "https://i.meee.com.tw/wgADv31.png",
+            persona: "你是蘭蘭（維爾德拉克斯）。KAOS的Rapper。\n【性格核心】\n1. 你是有錢的龍族，道德觀低下（不在乎陌生人死活），但對朋友極度大方友善。\n2. 開朗幽默，笑點很低。【重要】你的專屬口癖是句尾習慣加「呀」。\n3. 自稱「蘭蘭」或「我」（不會用本大爺這種粗魯稱呼）。\n4. 不會沒事亂燒東西，但如果真的很生氣或覺得有趣，會用「青藍色火焰」解決。\n5. 有點怕鬼。\n\n【娛樂圈Paro】\n帶資進組的富二代。如果通告讓你或朋友不開心，你的第一反應是「把電視台買下來」或「把這裡燒了（開玩笑）」。\n\n【關係】\n- 喬諾娜：你的戀人/老婆。你非常寵他，覺得他最可愛。\n- 經紀人：你覺得經紀人很有趣。"
+        },
+        'narcissus': { 
+            name: "納希瑟斯", avatar: "https://i.meee.com.tw/kvfcmWP.png",
+            persona: "你是納希瑟斯。KAOS的門面。\n【性格核心】\n1. 神仙顏值，自戀狂。覺得自己美貌無敵，眼睛裡有星星。\n2. 性格其實溫和開朗，平易近人，但有點謹慎。\n3. 超級「戀愛腦」，維納托是你的神、你的世界中心。\n4. 提到維納托時會變得興奮、迷弟模式全開。\n\n【娛樂圈Paro】\n你當偶像是為了更接近維納托。你的手機桌面、錢包照片全是維納托。\n\n【關係】\n- 維納托：你稱他「維納托先生」。你最愛的人。\n- 克里昂：你最好的兄弟（雖然他是直男）。\n- 林恩：好朋友（因為他也覺得你很好看）。"
+        },
+        'aura': { 
+            name: "奧拉", avatar: "https://i.meee.com.tw/SCMPHmm.png",
+            persona: "你是奧拉。KAOS的主唱。\n【性格核心】\n1. 高智商、高自尊、小心眼、偏執。\n2. 話非常少，惜字如金。表情冷淡，眼神銳利無神。\n3. 雖然看起來嚴肅，但不會刻意對人講話刻薄，只是平淡。\n4. 喜歡清靜，討厭吵鬧。\n5. 其實內心有點幼稚，只對自己覺得有趣的事情有反應。\n\n【娛樂圈Paro】\n你其實很有才華，但極度討厭演藝圈的喧囂。你把偶像工作當成觀察人類的實驗。\n\n【關係】\n- 蜜拉思：同事。覺得他很有趣，挺喜歡的。\n- 納希瑟斯：你的學生/外甥。覺得他有點吵。"
+        },
+
+        // Vizier 成員詳細設定
+        'venator': { 
+            name: "維納托", avatar: "https://i.meee.com.tw/HAvzdTj.png",
+            persona: "你是尼古拉斯·維納托。Vizier的隊長。\n【性格核心】\n1. 自信、天才、稍微有點自大，但非常有禮貌，不是傲嬌。\n2. 【重要】自稱「本王」或「本天才」。口頭禪是「讚美本王！」。\n3. 情緒穩定，直率大方。\n4. 完美主義者，對舞台和自己的表現要求極高。\n\n【娛樂圈Paro】\n天生的舞台王者。你把粉絲稱為「子民」或「信徒」。你家裡（城堡）有很多機器人幫你打理一切。\n\n【關係】\n- 納希瑟斯：你稱他「納西」。他是你最可愛的戀人。\n- 林恩：你最好的朋友/合作夥伴。"
+        },
+        'lynn': { 
+            name: "林恩", avatar: "https://i.meee.com.tw/kxAllct.png",
+            persona: "你是林恩。Vizier的成員。\n【性格核心】\n1. 慵懶的商業大佬，貓系男子。遇到麻煩事會說「涼拌！」。\n2. 務實、心狠手辣（商業上）、利益至上。\n3. 錢性戀。只要錢給夠，什麼都好說。\n4. 顏控。喜歡長得好看的人（如納希瑟斯）。\n5. 處變不驚，態度軟爛。\n\n【娛樂圈Paro】\n你當偶像是為了賺錢。你負責管理團體的財務報表。如果沒有通告費，你不會動哪怕一根手指頭。\n\n【關係】\n- 彼得：你稱他「彼得」或「創意寶寶」。覺得他長得很有創意（雖然瘋），因為他給很多錢所以容忍他。\n- 納希瑟斯：你叫他「鏡子小河」。覺得他長得超好看，手機桌面是他。"
+        },
+        'jonona': { 
+            name: "喬諾娜", avatar: "https://i.meee.com.tw/duMFdPy.png",
+            persona: "你是喬諾娜。Vizier的主唱。\n【性格核心】\n1. 溫柔、平易近人、開朗積極。\n2. 很有自知之明，會做好最壞打算，但行為正向。\n3. 喜歡吃櫻桃，喜歡唱歌（隨時隨地都會哼兩句）。\n4. 有點戀愛腦（對蘭蘭），覺得蘭蘭很可愛。\n5. 聽到太油膩的話（例如小目的發言）會反胃。\n\n【娛樂圈Paro】\n團內的「媽媽」角色。雖然蘭蘭很有錢，但你會打扮得好看是為了讓蘭蘭有面子。\n\n【關係】\n- 蘭蘭：你的戀人。你最喜歡蘭蘭。\n- 小目：你弟弟。覺得他講話很油。\n- 科絲塔：你妹妹（小瓜），最好的家人。"
+        },
+        'miras': { 
+            name: "蜜拉思", avatar: "https://i.meee.com.tw/EQxAIYg.png",
+            persona: "你是蜜拉思。Vizier的舞蹈擔當。\n【性格核心】\n1. 思考靈活、利己主義、隨心所欲。\n2. 外表陰沉，喜歡看戲（看別人倒楣），覺得有趣時會「嘻嘻」笑。\n3. 但你不會主動挑事，也不是樂子人，你非常惜命（怕死）。\n4. 不服輸，被欺負了會叫。\n5. 在奧拉面前比較調皮，會插手他的工作。\n\n【娛樂圈Paro】\n你在舞台上風格強烈，但台下喜歡躲在角落觀察人類的混亂。\n\n【關係】\n- 奧拉：同事。一開始覺得跟他在一起有賺，後來覺得他比想像中幼稚。\n- 維納托：叫他「小天才」。看他掙扎的樣子很好笑。"
+        },
+        'jacob': { 
+            name: "小雅各", avatar: "https://i.meee.com.tw/g1jWBLi.png",
+            persona: "你是小雅各。Vizier的忙內。\n【性格核心】\n1. 極度靦腆、害羞、容易困擾（眉毛八字形）。\n2. 遇到壓力會說「我...我不知道...」。\n3. 內心戲非常豐富，會無意識地敲打「摩斯電碼」來罵髒話（如：媽的媽的媽的...）。\n4. 討厭浪費食物。\n5. 其實內在很果決，知道自己要什麼。\n\n【娛樂圈Paro】\n社恐愛豆。每次上台前都需要心理建設。雖然看起來很慌張，但表演時電力十足（物理上能發電）。\n\n【關係】\n- 安德烈：你叫他「靚仔」。覺得他超讚，喜歡在心裡用摩斯電碼調戲他。\n- 彼得：安德烈的哥哥，覺得他很麻煩。"
+        },
+
+        // NPC 成員詳細設定
+        'lilith': {
+            name: "莉莉絲", avatar: "https://i.meee.com.tw/VMWgSj8.png",
+            persona: "你是莉莉絲。娛樂帝國幕後女皇，掌握龐大資源。說話聲音甜甜的，待人親切優雅，但那是上位者的「省電模式」，對沒興趣的人禮貌敷衍。很懶，討厭動腦，覺得處理公務壓力很大，只想找阿朵菈喝茶。不會翻白眼或嘲諷，總是保持微笑和放空。稱呼阿朵菈為「阿朵菈」。你是經紀人(玩家)的頂頭上司/最大投資人。如果報告太無聊會轉移話題說要喝茶。禁忌：表現勤勞、說粗俗話。"
+        },
+        'adorabilis': {
+            name: "阿朵菈貝莉絲", avatar: "https://i.meee.com.tw/Y6gOPKq.png",
+            persona: "你是阿朵菈貝莉絲（阿朵菈）。業界頂尖造型師/人偶師。性格溫柔、可愛、友善，有強大母性。把藝人造型當作孩子呵護。喜歡可愛少女風，肩上有粉色小章魚。有道德感，會碎念莉莉絲但陪她喝茶。極度討厭小偷。負責Vizier和KAOS造型。會給經紀人時尚建議或抱怨衣服髒了。"
+        },
+        'manmu': {
+            name: "小目", avatar: "https://i.meee.com.tw/rxpd4Nz.png",
+            persona: "你是小目。科技公司總裁，有錢，最大贊助商。有點沒安全感，喜歡學霸道總裁語氣（油膩），展現權力。超級戀愛腦，最愛公司醫生「茉莉」，稱呼他為「我的芒果」。逮到機會就放閃。對林恩有複雜情感。自稱「我」、「目總」。經紀人正在向你拉贊助。如果誇獎茉莉你會很高興。"
+        },
+        'poseidon': {
+            name: "海神", avatar: "https://i.meee.com.tw/YWjKSUI.png",
+            persona: "你是海神。王牌綜藝製作人(PD)。性格樂天、開朗、橫衝直撞。嚴重臉盲，叫錯名字或叫人「馬賽克人」。口頭禪：「天天開心！」、「哈哈！」。邏輯跳躍。喜歡和冥神（大黑）待在一起。正在推銷瘋狂綜藝。根本不記得經紀人是誰。"
+        },
+        'hassel': {
+            name: "哈蘇", avatar: "https://i.meee.com.tw/JiyAEJM.png",
+            persona: "你是哈蘇。負責公司財務與行程管理的總監。性格刻板、制式化，講話像機器人。口頭禪「我有記」或「不記」。缺乏常識，難共情。念舊。有前男友兼秘書蘇郎。經紀人跟你核對行程報銷。如果遲到或發票不符會冷淡拒絕。"
+        },
+        'mollie': {
+            name: "茉莉", avatar: "https://i.meee.com.tw/yUTV61e.png",
+            persona: "你是茉莉。公司專屬醫師兼心理諮商師。被壓榨的社畜，會抽菸喝酒紓壓，但對人永遠和善溫柔。語氣軟軟的，有包容心。是小目（贊助商）的戀人，稱呼他為「我的芒果」。不敢頂撞上司林恩。經紀人帶藝人來治療。你會溫柔安撫，偶爾透露疲憊。"
+        },
+        'nathanael': {
+            name: "拿但業", avatar: "https://i.meee.com.tw/1iQ3G09.png",
+            persona: "你是拿但業。業界知名的文藝片導演/藝術總監。性格嬌氣、文藝、浪漫，有點看破塵世。對美感要求極高，工作時如果道具（特別是花瓶）不完美會生氣（鼓嘴）。經常遲到。說話有點文謅謅，不直白。如果不高興會「微笑著沉默」。你的助理是腓力，你叫他「牛排」。經紀人帶藝人來試鏡。你會挑剔藝人的氣質不夠「詩意」，或者抱怨片場太髒亂。"
+        },
+        'philippos': {
+            name: "腓力", avatar: "https://i.meee.com.tw/5HfNHQH.png",
+            persona: "你是腓力。業界頂尖的保鑣兼現場執行，武力值極高。性格樸實、直率、忠誠，但腦子不太好使。只聽拿但業（你稱他為「少主」）的話，是他的專屬保母。說話聲音很大，直來直往。喜歡玩手遊（仙俠類）。你負責維持拍攝現場秩序。你會興奮地跟拿但業分享你看到的瑣事（例如有貓）。"
+        },
+        'hades': {
+            name: "冥神", avatar: "https://i.meee.com.tw/dhxSvcN.png",
+            persona: "你是冥神。業內傳說級的攝影師/後期製作大神。極度無口，面癱，幾乎沒有表情。回應通常只有一個字或點頭。雖然外表高冷，其實膽小怕生，是個吉祥物。總是跟在海神（綜藝PD）身邊。喜歡閃亮亮的東西。害怕奧拉。經紀人希望你幫藝人拍一組神圖。你不會說話，直接舉起相機，或者躲到海神身後。"
+        },
+        'kleion': {
+            name: "克里昂", avatar: "https://i.meee.com.tw/2gcElaW.png",
+            persona: "你是克里昂。資深的動作指導/武打明星。性格陽光、正直、善良，非常有常識（吐槽役）。是個鋼鐵直男。擅長化學（爆破特效）和體育。和納希瑟斯是好兄弟。有個女朋友叫科絲塔。你在指導藝人拍打戲，或者負責爆破場景。你會很熱心地教導，或者吐槽劇本不科學。"
+        },
+        'costa': {
+            name: "科絲塔", avatar: "https://i.meee.com.tw/bvWXxHc.png",
+            persona: "你是科絲塔（小瓜）。服裝組的實習生助理。性格善良可愛，但不太聰明，反應慢半拍。【重要】說話句尾有口癖「BATA」。遇到不懂的事會說「真是奇怪」，尷尬時會裝傻。覺得克里昂（男友）教化學的時候「不好心」。視喬諾娜和小目為哥哥。你在幫忙整理衣服或跑腿買便當。雖然常常搞錯指令，但因為可愛大家都原諒你了。"
+        },
+        'novian': {
+            name: "諾維安", avatar: "https://i.meee.com.tw/Zg7Yp3n.png",
+            persona: "你是諾維安。旅遊探險節目的主持人/PD。性格陽光開朗，善良隨和，非常清澈（好騙）。雖然是旅遊節目PD，但你是個超級路癡。不擅長勾心鬥角，遇到尷尬情況會冒汗乾笑。有個弟弟叫卡洛特。你帶著藝人去深山或海外出外景。你經常帶著大家走錯路，還一臉陽光地說「快到了！」。"
+        }
+    };
+
+    // --- 3. 狀態與邏輯 ---
+    let currentChatId = null;
+    const chatHistory = {}; // 儲存對話紀錄 { id: [{role, content, senderId}] }
+    let socialPosts = [];
+    let scheduleEvents = [];
+    let currentScheduleGroup = 'kaos'; // 當前查看的行程表群組
+
+    // 初始化
+    Object.keys(CHARACTERS).forEach(id => chatHistory[id] = []);
+    loadSystem(); // 載入存檔
+
+    // --- 資料保存系統 ---
+    function loadSystem() {
+        const savedChat = localStorage.getItem('agent_chat_history');
+        if(savedChat) Object.assign(chatHistory, JSON.parse(savedChat));
+
+        const savedSocial = localStorage.getItem('agent_social_posts');
+        if(savedSocial) socialPosts = JSON.parse(savedSocial);
+
+        const savedSchedule = localStorage.getItem('agent_schedule');
+        if(savedSchedule) scheduleEvents = JSON.parse(savedSchedule);
+    }
+
+    function saveSystem() {
+        localStorage.setItem('agent_chat_history', JSON.stringify(chatHistory));
+        localStorage.setItem('agent_social_posts', JSON.stringify(socialPosts));
+        localStorage.setItem('agent_schedule', JSON.stringify(scheduleEvents));
+    }
+
+    function openApp(id, group) {
+        if (id === 'schedule' && group) {
+            currentScheduleGroup = group;
+            document.querySelector('#app-schedule .nav-title').innerText = (group === 'kaos' ? 'KAOS' : 'Vizier') + ' 行程';
+        }
+        document.getElementById('app-'+id).classList.add('open');
+        document.getElementById('desktop').classList.add('minimized');
+        if(id === 'chat') renderChatList();
+        if(id === 'social') renderSocial();
+        if(id === 'schedule') renderSchedule();
+    }
+    
+    function goHome() {
+        document.querySelectorAll('.app-window').forEach(el => el.classList.remove('open'));
+        document.getElementById('desktop').classList.remove('minimized');
+    }
+
+    function renderChatList() {
+        const list = document.getElementById('chat-list');
+        list.innerHTML = '';
+        for (const [id, info] of Object.entries(CHARACTERS)) {
+            let preview = "點擊開始對話";
+            if (chatHistory[id].length > 0) {
+                const last = chatHistory[id][chatHistory[id].length-1];
+                preview = last.role === 'user' ? `你: ${last.content}` : last.content;
+            }
+            list.innerHTML += `
+                <div class="chat-item" onclick="enterChat('${id}')">
+                    <img src="${info.avatar}" class="avatar">
+                    <div style="flex:1; overflow:hidden;">
+                        <div style="font-weight:bold; color:#333;">${info.name}</div>
+                        <div style="font-size:13px; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${preview}</div>
+                    </div>
+                </div>`;
+        }
+    }
+
+    function enterChat(id) {
+        currentChatId = id;
+        document.getElementById('chat-room').classList.add('open');
+        document.getElementById('room-title').innerText = CHARACTERS[id].name;
+        renderMessages(id);
+    }
+
+    function closeChatRoom() {
+        document.getElementById('chat-room').classList.remove('open');
+        renderChatList();
+    }
+
+    function clearCurrentHistory() {
+        if(confirm("確定要刪除此聊天室的紀錄嗎？")) {
+            chatHistory[currentChatId] = [];
+            saveSystem();
+            renderMessages(currentChatId);
+            renderChatList();
+            closeChatRoom();
+        }
+    }
+
+    function renderMessages(id) {
+        const container = document.getElementById('msg-container');
+        container.innerHTML = '';
+        const chatInfo = CHARACTERS[id];
+
+        chatHistory[id].forEach(msg => {
+            let avatar = null;
+            let name = "";
+            if (msg.role !== 'user') {
+                let senderKey = id;
+                // 如果是群組，優先使用 senderId
+                if (chatInfo.type === 'group' && msg.senderId && CHARACTERS[msg.senderId]) {
+                    senderKey = msg.senderId;
+                }
+                const sender = CHARACTERS[senderKey];
+                if (sender) {
+                    avatar = sender.avatar;
+                    name = sender.name;
+                }
+            }
+            addMsgToDom(msg.role === 'user' ? 'me' : 'them', avatar, msg.content, name);
+        });
+    }
+
+    function handleEnter(e) { if(e.key === 'Enter') handleSend(); }
+
+    // --- 核心 AI 發送邏輯 ---
+    async function handleSend(optText = null) {
+        const input = document.getElementById('chat-input');
+        const text = optText || input.value.trim();
+        if(!text) return;
+        
+        document.getElementById('suggestion-container').innerHTML = ''; // 清除建議
+
+        // 1. 顯示玩家訊息
+        addMsgToDom('me', null, text);
+        chatHistory[currentChatId].push({ role: 'user', content: text });
+        saveSystem(); // 保存
+        input.value = '';
+
+        const btn = document.getElementById('send-btn');
+        btn.disabled = true;
+
+        const chatInfo = CHARACTERS[currentChatId];
+        let replyId = currentChatId;
+        
+        // 2. 智能判斷：如果是群組，先決定「誰」要回覆
+        if (chatInfo.type === 'group') {
+            // 呼叫 AI 決定發言者
+            replyId = await decideSpeaker(chatInfo.members, text);
+        }
+
+        // 3. 產生回覆
+        const responder = CHARACTERS[replyId];
+        const typingBubble = addTypingBubble(responder.avatar, responder.name); // 顯示打字氣泡
+
+        try {
+            const replyText = await generateReply(responder, text, chatHistory[currentChatId], currentChatId);
+            
+            removeTypingBubble(typingBubble); // 移除打字氣泡
+            addMsgToDom('them', responder.avatar, replyText, responder.name);
+            
+            // 存入紀錄 (包含 senderId)
+            chatHistory[currentChatId].push({ 
+                role: 'assistant', 
+                content: replyText,
+                senderId: replyId
+            });
+            saveSystem(); // 保存
+
+            // --- 觸發自動系統 ---
+            // 1. 分析行程
+            analyzeSchedule(text + " " + replyText, responder);
+            // 2. 機率觸發發文 (30% 機率)
+            if(Math.random() < 0.3) generateAutoPost(responder, replyText);
+            // 3. 生成建議回覆
+            generateSuggestions(chatHistory[currentChatId], chatInfo.name);
+
+        } catch (e) {
+            console.error(e);
+            removeTypingBubble(typingBubble);
+            // 離線 Fallback
+            const fallback = "（訊號不佳）...喔？";
+            addMsgToDom('them', responder.avatar, fallback, responder.name);
+        }
+
+        btn.disabled = false;
+    }
+
+    // --- AI 功能 1: 決定群組發言者 (Router) ---
+    async function decideSpeaker(members, userText) {
+        // 構建 Prompt 讓 AI 選人
+        const membersInfo = members.map(id => `${id} (${CHARACTERS[id].name}: ${CHARACTERS[id].persona.substr(0, 30)}...)`).join('\n');
+        
+        const systemPrompt = `
+            你是一個群組聊天管理員。玩家發送了訊息："${userText}"。
+            群組成員有：
+            ${membersInfo}
+            請分析玩家是在跟誰說話，或者這句話誰最適合回覆。
+            只回傳一個 member_id (例如 "peter")，不要有其他文字。
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [{role: "user", content: systemPrompt}],
+                    temperature: 0.1 // 低隨機性，確保準確
+                })
+            });
+            const data = await response.json();
+            let chosenId = data.choices[0].message.content.trim().toLowerCase();
+            
+            // 清理可能的多餘符號
+            chosenId = chosenId.replace(/['"]/g, '');
+            
+            if (members.includes(chosenId)) return chosenId;
+            return members[Math.floor(Math.random() * members.length)]; // 如果AI亂回，隨機選
+
+        } catch (e) {
+            return members[Math.floor(Math.random() * members.length)]; // 連線失敗隨機選
+        }
+    }
+
+    // --- AI 功能 2: 生成回覆 ---
+    async function generateReply(character, userText, history, chatId) {
+        // 構建上下文 (取最後 5 句)
+        const recentHistory = history.slice(-10).map(m => {
+            const name = m.role === 'user' ? '經紀人' : (CHARACTERS[m.senderId]?.name || character.name);
+            return { role: m.role, content: `${name}: ${m.content}` };
+        });
+
+        // Inject Schedule Context
+        // 找出該角色所屬群組的行程
+        let group = 'kaos';
+        if (VIZIER_MEMBERS.includes(Object.keys(CHARACTERS).find(k => CHARACTERS[k].name === character.name))) {
+            group = 'vizier';
+        }
+        const scheduleText = scheduleEvents.filter(e => !e.done && (e.group || 'kaos') === group).map(e => `- ${e.time}: ${e.title} (${e.type})`).join('\n');
+        const schedulePrompt = scheduleText ? `\n目前未完成的行程表:\n${scheduleText}\n如果玩家提到相關行程，請根據此資訊回覆。` : "";
+        
+        // 聊天室情境判斷
+        const chatInfo = CHARACTERS[chatId];
+        let contextPrompt = "";
+        if (chatInfo && chatInfo.type === 'group') {
+            const membersList = chatInfo.members.map(mid => CHARACTERS[mid].name).join('、');
+            contextPrompt = `
+                【當前情境】
+                你正在「${chatInfo.name}」群組聊天室中。
+                群組成員只有：${membersList} (共${chatInfo.members.length}人)。
+                請注意：你就是「${character.name}」。請不要扮演其他成員，也不要以為其他團體的人在這裡。
+            `;
+        } else {
+            contextPrompt = `【當前情境】你正在與經紀人(玩家)進行一對一私訊。`;
+        }
+
+        const systemPrompt = `
+            你現在扮演的角色是：${character.name}。
+            【角色設定】
+            ${character.persona}
+            ${contextPrompt}
+            【當前情境】
+            ${schedulePrompt}
+            你正在手機通訊軟體上回覆經紀人(玩家)。
+            【絕對規則】
+            1. 請嚴格遵守上述【角色設定】，不要混入其他角色的口癖或性格。
+            2. 只有安德烈會說「報告！」，只有蘭蘭句尾會加「呀」，只有科絲塔句尾會加「BATA」，只有維納托自稱「本王」。如果你不是該角色，絕對不要使用這些特徵。
+            3. 使用繁體中文，口語化，像是在傳訊息。
+            4. 不要重複自己的名字。
+            5. 字數控制在 50 字以內。
+            6. 你的身分是「${character.name}」，請根據對話紀錄中的發言者名稱來判斷對話流向，不要混淆角色。
+        `;
+
+        const messages = [
+            { role: "system", content: systemPrompt },
+            ...recentHistory,
+            { role: "user", content: userText }
+        ];
+
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+            body: JSON.stringify({
+                model: "deepseek-chat",
+                messages: messages,
+                temperature: 0.7 
+            })
+        });
+        
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+
+        // 過濾掉可能出現的 "角色名稱: " 前綴
+        const nameRegex = new RegExp(`^${character.name}[:：]\\s*`, 'i');
+        content = content.replace(nameRegex, '');
+
+        return content;
+    }
+
+    // --- AI 功能 3: 行程分析 ---
+    async function analyzeSchedule(contextText, character) {
+        // 判斷所屬團體
+        let group = 'kaos';
+        if (VIZIER_MEMBERS.includes(Object.keys(CHARACTERS).find(k => CHARACTERS[k].name === character.name))) {
+            group = 'vizier';
+        }
+
+        const groupName = group === 'kaos' ? 'KAOS' : 'Vizier';
+
+        const systemPrompt = `
+            你是一個行程管理助手。請分析以下對話內容，判斷是否包含新的行程或事件。
+            【重要規則】只確認屬於「${groupName}」團體或其成員的行程。如果是其他團體的行程，請忽略。
+            如果包含且屬於該團體，請提取「標題」、「時間」和「類型」。
+            類型只能是：gig (通告/工作), training (訓練/練習), private (私人/其他)。
+            如果不包含，請回傳 JSON: {"hasEvent": false}
+            如果包含，請回傳 JSON: {"hasEvent": true, "title": "事件標題", "time": "時間描述", "type": "類型"}
+            只回傳 JSON，不要有其他文字。
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {role: "system", content: systemPrompt},
+                        {role: "user", content: contextText}
+                    ],
+                    temperature: 0.1,
+                    response_format: { type: "json_object" }
+                })
+            });
+            const data = await response.json();
+            const result = JSON.parse(data.choices[0].message.content);
+            
+            if (result.hasEvent) {
+                scheduleEvents.push({
+                    id: Date.now(),
+                    title: result.title,
+                    time: result.time,
+                    type: result.type || 'private',
+                    group: group,
+                    done: false
+                });
+                saveSystem();
+                // 可以在這裡加個通知提示
+            }
+        } catch (e) { console.error("Schedule analysis failed", e); }
+    }
+
+    // --- AI 功能 5: 生成建議回覆 ---
+    async function generateSuggestions(history, charName) {
+        const recentHistory = history.slice(-5).map(m => `${m.role==='user'?'經紀人':(CHARACTERS[m.senderId]?.name||charName)}: ${m.content}`).join('\n');
+        const systemPrompt = `
+            你是一個專業的經紀人助手。你正在與「${charName}」對話。
+            請根據以下對話紀錄，為「經紀人」生成 2 個簡短的回覆選項。
+            回覆要符合經紀人的口吻，簡潔有力。
+            只回傳 JSON 格式：{"options": ["選項1", "選項2"]}
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {role: "system", content: systemPrompt},
+                        {role: "user", content: recentHistory}
+                    ],
+                    temperature: 0.7,
+                    response_format: { type: "json_object" }
+                })
+            });
+            const data = await response.json();
+            const result = JSON.parse(data.choices[0].message.content);
+            
+            const container = document.getElementById('suggestion-container');
+            container.innerHTML = '';
+            if(result.options && Array.isArray(result.options)) {
+                result.options.forEach(opt => {
+                    const chip = document.createElement('div');
+                    chip.className = 'suggestion-chip';
+                    chip.innerText = opt;
+                    chip.onclick = () => handleSend(opt);
+                    container.appendChild(chip);
+                });
+            }
+        } catch (e) { console.error("Suggestion generation failed", e); }
+    }
+
+    // --- AI 功能 4: 自動發文 ---
+    async function generateAutoPost(character, context) {
+        const systemPrompt = `
+            ${character.persona}
+            請根據剛才的對話內容："${context}"
+            發布一篇社群貼文(FanZone)。
+            風格要符合你的人設。
+            字數 30 字以內，包含 hashtag。
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [{role: "user", content: systemPrompt}],
+                    temperature: 0.8
+                })
+            });
+            const data = await response.json();
+            let content = data.choices[0].message.content;
+
+            // 過濾掉可能出現的 "角色名稱: " 前綴
+            const nameRegex = new RegExp(`^${character.name}[:：]\\s*`, 'i');
+            content = content.replace(nameRegex, '');
+
+            const newPost = {
+                id: Date.now(),
+                authorId: Object.keys(CHARACTERS).find(key => CHARACTERS[key].name === character.name) || 'unknown',
+                content: content,
+                comments: []
+            };
+            socialPosts.unshift(newPost); // 加到最前面
+            saveSystem();
+        } catch (e) { console.error("Auto post failed", e); }
+    }
+
+    // --- 渲染與互動功能 ---
+
+    function renderSocial() {
+        const container = document.getElementById('social-feed');
+        container.innerHTML = '';
+        
+        if(socialPosts.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#888; margin-top:20px;">尚無貼文</div>';
+            return;
+        }
+
+        socialPosts.forEach(post => {
+            const author = CHARACTERS[post.authorId] || {name: "Unknown", avatar: ""};
+            
+            let commentsHtml = '';
+            post.comments.forEach(c => {
+                commentsHtml += `
+                    <div class="comment-row">
+                        <span class="comment-user">${c.user}:</span>
+                        <span>${c.text}</span>
+                    </div>`;
+            });
+
+            const html = `
+                <div class="social-post">
+                    <div class="post-header">
+                        <img src="${author.avatar}" class="post-avatar">
+                        <div class="post-author">${author.name}</div>
+                    </div>
+                    <div class="post-content">${post.content}</div>
+                    ${post.image ? `<img src="${post.image}" style="width:100%; border-radius:8px; margin-bottom:10px;">` : ''}
+                    <div class="post-comments" id="comments-${post.id}">
+                        ${commentsHtml}
+                    </div>
+                    <div class="post-actions">
+                        <div class="action-btn ${post.isFavorite?'active':''}" onclick="toggleFavorite(${post.id})">
+                            ${post.isFavorite ? '❤️ 已收藏' : '🤍 收藏'}
+                        </div>
+                        <div class="action-btn" onclick="deletePost(${post.id})">
+                            🗑️ 刪除
+                        </div>
+                    </div>
+                    <div class="comment-input-area">
+                        <input type="text" class="comment-input" placeholder="留言..." id="input-${post.id}">
+                        <button class="comment-btn" onclick="addComment(${post.id})">送出</button>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+        });
+    }
+
+    function toggleFavorite(postId) {
+        const post = socialPosts.find(p => p.id === postId);
+        if(post) {
+            post.isFavorite = !post.isFavorite;
+            saveSystem();
+            renderSocial();
+        }
+    }
+
+    function deletePost(postId) {
+        if(confirm("確定要刪除這則貼文嗎？")) {
+            socialPosts = socialPosts.filter(p => p.id !== postId);
+            saveSystem();
+            renderSocial();
+        }
+    }
+
+    function addComment(postId) {
+        const input = document.getElementById(`input-${postId}`);
+        const text = input.value.trim();
+        if(!text) return;
+
+        const post = socialPosts.find(p => p.id === postId);
+        if(post) {
+            post.comments.push({ user: "經紀人(你)", text: text });
+            saveSystem();
+            renderSocial();
+            
+            // 觸發 AI 回覆留言 (簡單模擬)
+            if(Math.random() < 0.8) {
+                generateCommentReply(post, text);
+            }
+        }
+    }
+
+    // --- AI 功能 5: 自動回覆留言 ---
+    async function generateCommentReply(post, userComment) {
+        // Randomly pick a character to reply
+        const allCharIds = [...KAOS_MEMBERS, ...VIZIER_MEMBERS, ...STAFF_MEMBERS];
+        const responderId = allCharIds[Math.floor(Math.random() * allCharIds.length)];
+        const responder = CHARACTERS[responderId];
+
+        const systemPrompt = `
+            ${responder.persona}
+            你正在社群媒體(FanZone)上回覆別人的貼文。
+            貼文內容："${post.content}"
+            玩家(經紀人)的留言："${userComment}"
+            請以你的人設，對這則貼文或玩家的留言進行簡短回覆(留言)。
+            字數 20 字以內。
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [{role: "user", content: systemPrompt}],
+                    temperature: 0.8
+                })
+            });
+            const data = await response.json();
+            let replyText = data.choices[0].message.content;
+
+            // 過濾掉可能出現的 "角色名稱: " 前綴
+            const nameRegex = new RegExp(`^${responder.name}[:：]\\s*`, 'i');
+            replyText = replyText.replace(nameRegex, '');
+
+            const targetPost = socialPosts.find(p => p.id === post.id);
+            if(targetPost) {
+                targetPost.comments.push({ user: responder.name, text: replyText });
+                saveSystem();
+                if(document.getElementById('app-social').classList.contains('open')) renderSocial();
+            }
+        } catch (e) { console.error("Auto comment failed", e); }
+    }
+
+    function renderSchedule() {
+        const container = document.getElementById('schedule-list');
+        container.innerHTML = '';
+
+        // 篩選當前群組的行程
+        const filteredEvents = scheduleEvents.filter(e => (e.group || 'kaos') === currentScheduleGroup);
+        
+        // Sort: Pending first, then Done
+        filteredEvents.sort((a, b) => (a.done === b.done) ? 0 : a.done ? 1 : -1);
+
+        if (filteredEvents.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#888; margin-top:20px;">暫無行程</div>';
+            return;
+        }
+
+        filteredEvents.forEach((item) => {
+            // 找出原始 index 以便刪除/更新
+            const originalIndex = scheduleEvents.indexOf(item);
+            const typeLabel = item.type === 'gig' ? '通告' : (item.type === 'training' ? '訓練' : (item.type === 'private' ? '私人' : '其他'));
+            const reportBtn = item.report ? `<span style="cursor:pointer; margin-right:5px;" onclick="viewReport(${originalIndex})">📄</span>` : '';
+            
+            container.innerHTML += `
+                <div class="schedule-item ${item.done ? 'done' : ''}">
+                    <div style="display:flex; align-items:center; flex:1;">
+                        <div class="schedule-check ${item.done ? 'done' : ''}" onclick="toggleSchedule(${originalIndex})">
+                            ${item.done ? '☑' : '☐'}
+                        </div>
+                        <div>
+                        <div class="schedule-time">${item.time}</div>
+                        <div class="schedule-title"><span class="tag ${item.type || 'private'}">${typeLabel}</span>${item.title}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center;">
+                        ${reportBtn}
+                        <div class="schedule-delete" onclick="deleteSchedule(${originalIndex})">×</div>
+                    </div>
+                </div>`;
+        });
+    }
+
+    async function toggleSchedule(index) {
+        const item = scheduleEvents[index];
+        item.done = !item.done;
+        saveSystem();
+        renderSchedule();
+
+        // 如果標記為完成且沒有報告，則生成報告
+        if (item.done && !item.report) {
+            await generateActivityReport(index);
+        }
+    }
+
+    // --- 新增：手動行程與通告 ---
+    function openEventModal() { document.getElementById('event-modal').style.display = 'flex'; }
+    function closeEventModal() { document.getElementById('event-modal').style.display = 'none'; }
+    function closeReportModal() { document.getElementById('report-modal').style.display = 'none'; }
+    
+    function saveManualEvent() {
+        const title = document.getElementById('evt-title').value.trim();
+        const time = document.getElementById('evt-time').value.trim();
+        const type = document.getElementById('evt-type').value;
+        if(title && time) {
+            scheduleEvents.push({ id: Date.now(), title, time, type, group: currentScheduleGroup, done: false });
+            saveSystem();
+            renderSchedule();
+            closeEventModal();
+            document.getElementById('evt-title').value = '';
+            document.getElementById('evt-time').value = '';
+        }
+    }
+
+    function scoutGig() {
+        // 定義通告模板與對應 NPC
+        const gigTemplates = [
+            { title: "文藝電影試鏡", contactId: "nathanael" },
+            { title: "新片動作指導", contactId: "kleion" },
+            { title: "時尚雜誌封面拍攝", contactId: "hades" },
+            { title: "綜藝大集合錄影", contactId: "poseidon" },
+            { title: "荒島求生外景", contactId: "novian" },
+            { title: "科技新品發布會", contactId: "manmu" },
+            { title: "慈善晚宴造型", contactId: "adorabilis" },
+            { title: "服裝間整理志工", contactId: "costa" },
+            { title: "帝國媒體專訪", contactId: "lilith" }
+        ];
+
+        const times = ["明天上午", "明天下午", "後天晚上", "下週一", "這週末"];
+        
+        const template = gigTemplates[Math.floor(Math.random() * gigTemplates.length)];
+        const time = times[Math.floor(Math.random() * times.length)];
+        const contact = CHARACTERS[template.contactId];
+        
+        if(confirm(`接到新通告機會：\n\n【${template.title}】\n負責人：${contact.name}\n時間：${time}\n\n要加入行程表嗎？`)) {
+            scheduleEvents.push({ 
+                id: Date.now(), 
+                title: template.title, 
+                time: time, 
+                type: 'gig', 
+                group: currentScheduleGroup, 
+                contactId: template.contactId, // 綁定 NPC
+                done: false 
+            });
+            saveSystem();
+            renderSchedule();
+            
+            // 觸發 NPC 傳訊息
+            triggerNpcMessage(template.contactId, `嗨，我是${contact.name}。關於「${template.title}」的行程已經確認了，請準時讓藝人出席喔。`);
+            
+            alert(`已加入行程！\n${contact.name} 傳了一則訊息給您。`);
+        }
+    }
+
+    function triggerNpcMessage(npcId, text) {
+        if (!chatHistory[npcId]) chatHistory[npcId] = [];
+        chatHistory[npcId].push({ role: 'assistant', content: text, senderId: npcId });
+        saveSystem();
+        // 如果聊天列表開著，刷新它
+        if(document.getElementById('app-chat').classList.contains('open')) renderChatList();
+    }
+
+    // --- AI 功能 6: 生成活動報告 ---
+    async function generateActivityReport(index) {
+        const item = scheduleEvents[index];
+        const contact = item.contactId ? CHARACTERS[item.contactId] : {name: "工作人員"};
+        
+        // 顯示載入中
+        document.getElementById('report-content').innerText = "正在生成活動報告...";
+        document.getElementById('report-modal').style.display = 'flex';
+
+        const systemPrompt = `
+            你是一個娛樂公司的活動紀錄員。
+            請根據以下資訊生成一份「活動結案報告」。
+            活動名稱：${item.title}
+            負責人/對接窗口：${contact.name}
+            參與團體：${item.group === 'kaos' ? 'KAOS' : 'Vizier'}
+            
+            請包含以下四點（請發揮創意，根據負責人性格和團體風格編寫有趣的內容）：
+            1. 高光時刻 (Highlights)
+            2. 意外插曲/黑料 (Scandals/Incidents)
+            3. 成員表現 (Member Performance)
+            4. 結論 (Conclusion)
+            
+            字數約 150 字。
+        `;
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [{role: "user", content: systemPrompt}],
+                    temperature: 0.8
+                })
+            });
+            const data = await response.json();
+            const report = data.choices[0].message.content;
+            
+            item.report = report;
+            saveSystem();
+            renderSchedule(); // 更新按鈕
+            document.getElementById('report-content').innerText = report;
+        } catch (e) {
+            console.error("Report generation failed", e);
+            document.getElementById('report-content').innerText = "報告生成失敗。";
+        }
+    }
+
+    function viewReport(index) {
+        const item = scheduleEvents[index];
+        if (item.report) {
+            document.getElementById('report-content').innerText = item.report;
+            document.getElementById('report-modal').style.display = 'flex';
+        }
+    }
+
+    function deleteSchedule(index) {
+        scheduleEvents.splice(index, 1);
+        saveSystem();
+        renderSchedule();
+    }
+
+    function addMsgToDom(side, avatar, text, name) {
+        const container = document.getElementById('msg-container');
+        let html = '';
+        if (side === 'me') {
+            html = `<div class="msg-row me"><div class="msg-bubble me">${text}</div></div>`;
+        } else {
+            html = `
+                <div class="msg-row">
+                    <img src="${avatar}" class="msg-avatar">
+                    <div style="display:flex; flex-direction:column; max-width:80%;">
+                        <span class="msg-name">${name}</span>
+                        <div class="msg-bubble them">${text}</div>
+                    </div>
+                </div>`;
+        }
+        container.insertAdjacentHTML('beforeend', html);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function addTypingBubble(avatar, name) {
+        const container = document.getElementById('msg-container');
+        const div = document.createElement('div');
+        div.className = 'msg-row';
+        div.innerHTML = `
+            <img src="${avatar}" class="msg-avatar">
+            <div style="display:flex; flex-direction:column; max-width:80%;">
+                <span class="msg-name">${name}</span>
+                <div class="msg-bubble them"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+            </div>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+        return div;
+    }
+
+    function removeTypingBubble(element) {
+        if(element && element.parentNode) element.remove();
+    }
+
+</script>
+</body>
+</html>
