@@ -18,20 +18,22 @@
 
         body {
             margin: 0; display: flex; justify-content: center; align-items: center;
-            height: 100vh; background-color: var(--bg-body);
+            height: 100dvh; background-color: var(--bg-body);
             font-family: 'Noto Sans TC', sans-serif;
             overflow: hidden; user-select: none;
             background-image: radial-gradient(circle at 50% 50%, #2b1055 0%, #000000 100%);
         }
 
         #phone {
-            width: 100%; max-width: 414px; height: 100%; max-height: 900px;
+            width: 100%; height: 100%;
             background: url('https://images.unsplash.com/photo-1614850523060-8da1d56ae167?q=80&w=1000&auto=format&fit=crop') no-repeat center center/cover;
             position: relative; overflow: hidden;
             display: flex; flex-direction: column;
             box-shadow: 0 0 50px rgba(0,0,0,0.8);
         }
-        @media (min-width: 420px) { #phone { border-radius: 40px; height: 90vh; border: 8px solid #222; } }
+        @media (min-width: 480px) { 
+            #phone { max-width: 414px; height: 90vh; max-height: 900px; border-radius: 40px; border: 8px solid #222; } 
+        }
 
         /* 頂部狀態列 */
         #status-bar {
@@ -662,19 +664,27 @@
 
         const systemPrompt = `
             你現在扮演的角色是：${character.name}。
-            【角色設定】
+            
+            【你的詳細角色設定】
             ${character.persona}
+            
             ${contextPrompt}
+            
             【當前情境】
             ${schedulePrompt}
             你正在手機通訊軟體上回覆經紀人(玩家)。
-            【絕對規則】
-            1. 請嚴格遵守上述【角色設定】，不要混入其他角色的口癖或性格。
-            2. 只有安德烈會說「報告！」，只有蘭蘭句尾會加「呀」，只有科絲塔句尾會加「BATA」，只有維納托自稱「本王」。如果你不是該角色，絕對不要使用這些特徵。
-            3. 使用繁體中文，口語化，像是在傳訊息。
-            4. 不要重複自己的名字。
-            5. 字數控制在 50 字以內。
-            6. 你的身分是「${character.name}」，請根據對話紀錄中的發言者名稱來判斷對話流向，不要混淆角色。
+            
+            【絕對規則 - 角色扮演】
+            1. 你必須完全沉浸在「${character.name}」這個角色中。
+            2. 嚴格區分你的角色與其他角色。你不是安德烈就絕對不說「報告！」，你不是蘭蘭就絕對不加「呀」，你不是科絲塔就絕對不加「BATA」，你不是維納托就絕對不自稱「本王」。
+            3. 請仔細閱讀對話紀錄中的發言者名字，確保你是在回應正確的對象。
+            4. 不要扮演其他角色，也不要替其他角色發言。
+            5. 如果對話中有多人，請只關注與你有關的內容或群組話題。
+            
+            【回覆格式】
+            1. 使用繁體中文，口語化，像是在傳訊息。
+            2. 不要重複自己的名字（例如不要說「${character.name}: ...」）。
+            3. 字數控制在 50 字以內。
         `;
 
         const messages = [
