@@ -170,6 +170,10 @@
         .btn-cancel { background: #f0f0f0; color: #333; }
         .btn-confirm { background: var(--accent-color); color: white; }
         .btn-view { background: #3498db; color: white; }
+        .api-key-row { display: flex; gap: 8px; }
+        .api-key-row .form-input { flex: 1; min-width: 0; }
+        .key-toggle { flex: 0 0 42px; border: 1px solid #ddd; border-radius: 8px; background: #f7f7f7; cursor: pointer; }
+        .form-help { display: block; margin-top: 6px; color: #888; font-size: 11px; line-height: 1.45; }
 
         /* 新增：打字動畫氣泡 */
         .typing-dots { display: inline-block; padding: 0 5px; }
@@ -216,6 +220,10 @@
             <div class="app-icon-bg" style="background: linear-gradient(135deg, #e74c3c, #c0392b);">📅</div>
             <div class="app-name">Vizier 行程</div>
         </div>
+        <div class="app-icon" onclick="openApiKeyModal()">
+            <div class="app-icon-bg" style="background: linear-gradient(135deg, #5856d6, #af52de);">🔑</div>
+            <div class="app-name">AI Key 設定</div>
+        </div>
     </div>
 
     <div id="app-chat" class="app-window">
@@ -258,6 +266,25 @@
     </div>
 
     <!-- Event Modal -->
+    <div id="api-key-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title">DeepSeek AI Key 設定</div>
+            <div class="form-group">
+                <label class="form-label" for="manual-api-key">API Key</label>
+                <div class="api-key-row">
+                    <input type="password" id="manual-api-key" class="form-input" autocomplete="off" placeholder="sk-...">
+                    <button type="button" id="api-key-toggle" class="key-toggle" onclick="toggleApiKeyVisibility()" title="顯示 Key">👁️</button>
+                </div>
+                <small class="form-help">Key 只保留在目前頁面的記憶體；重新整理或關閉頁面後會清除，不會寫入 localStorage。</small>
+            </div>
+            <div class="modal-btns">
+                <button class="modal-btn btn-cancel" onclick="closeApiKeyModal()">取消</button>
+                <button class="modal-btn btn-confirm" onclick="saveApiKey()">套用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Modal -->
     <div id="event-modal" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-title">新增行程</div>
@@ -294,8 +321,43 @@
 
 <script>
     // --- 1. API 配置 ---
-    const API_KEY = "sk-556ccc8b5a9e45b393c960629a152506";
+    let API_KEY = "";
     const API_URL = "https://api.deepseek.com/chat/completions";
+
+    function openApiKeyModal() {
+        const input = document.getElementById('manual-api-key');
+        input.value = API_KEY;
+        input.type = 'password';
+        document.getElementById('api-key-toggle').textContent = '👁️';
+        document.getElementById('api-key-modal').style.display = 'flex';
+        setTimeout(() => input.focus(), 0);
+    }
+
+    function closeApiKeyModal() {
+        document.getElementById('api-key-modal').style.display = 'none';
+    }
+
+    function toggleApiKeyVisibility() {
+        const input = document.getElementById('manual-api-key');
+        const showing = input.type === 'password';
+        input.type = showing ? 'text' : 'password';
+        document.getElementById('api-key-toggle').textContent = showing ? '🙈' : '👁️';
+    }
+
+    function saveApiKey() {
+        API_KEY = document.getElementById('manual-api-key').value.trim();
+        if (!API_KEY) { alert('請輸入 DeepSeek API Key。'); return; }
+        closeApiKeyModal();
+        alert('AI Key 已套用；重新載入頁面後會自動清除。');
+    }
+
+    function requireApiKey() {
+        if (!API_KEY) {
+            openApiKeyModal();
+            throw new Error('尚未設定 DeepSeek API Key');
+        }
+        return API_KEY;
+    }
 
     // --- 2. 角色資料庫 (演藝圈 Paro 設定) ---
     // 我們將角色分為「Vizier (女團風男團)」與「KAOS (混沌男團)」
@@ -609,7 +671,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [{role: "user", content: systemPrompt}],
@@ -695,7 +757,7 @@
 
         const response = await fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
             body: JSON.stringify({
                 model: "deepseek-chat",
                 messages: messages,
@@ -736,7 +798,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [
@@ -778,7 +840,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [
@@ -819,7 +881,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [{role: "user", content: systemPrompt}],
@@ -950,7 +1012,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [{role: "user", content: systemPrompt}],
@@ -1120,7 +1182,7 @@
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${requireApiKey()}` },
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [{role: "user", content: systemPrompt}],
